@@ -1,0 +1,223 @@
+package com.hotstar.datamodel.streaming.spark.iterator;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+
+import com.mobileum.analytics.filter.FilterValidator;
+import com.mobileum.analytics.validationframework.RecordValidator;
+import com.mobileum.analytics.validationframework.RecordValidatorfactory;
+import com.mobileum.analytics.xmlparsers.pojos.Output;
+import com.mobileum.analytics.xmlparsers.pojos.Token;
+import com.mobileum.common.log.MLog;
+import com.mobileum.common.log.MLogger;
+import com.mobileum.common.logger.ILogger;
+import com.mobileum.common.logger.LoggerService;
+import com.mobileum.common.stats.MStatusReporter;
+import com.mobileum.reader.AbstractRecordReader;
+import com.mobileum.reader.MMapWritable;
+import com.mobileum.transformer.Transformer;
+import com.mobileum.transformer.TransformerFactory;
+
+import au.com.bytecode.opencsv.CSVParser;
+
+public class JSONRecordReaderWrapper extends AbstractRecordReader<LongWritable, MMapWritable> {
+
+  private static final MLogger sLogger = MLogger.getLogger(JSONRecordReaderWrapper.class, true,
+      MLogger.LogLevel.INFO, 100, 1000);
+  
+  private static final ILogger logger;
+	static {
+		logger = LoggerService.getLogger(JSONRecordReaderWrapper.class.getName());
+	}
+  private final MLineRecordReaderWrapper reader;
+  private MMapWritable resultMap = null;
+  private final Map<String, String> resultHeaderStringMap = new HashMap<String, String>();
+  private CSVParser csvParser;
+  Pattern regex = null;
+  private final MStatusReporter statusReporter = MStatusReporter.getInstance();
+
+  public JSONRecordReaderWrapper(String schemaFileName) {
+    super(schemaFileName);
+    this.reader = new MLineRecordReaderWrapper();
+    schema = loadSchemaFile();
+  }
+  
+  public JSONRecordReaderWrapper(String schemaFileName, byte[] data, int offset, String pathString) {
+	    super(schemaFileName);
+	    this.reader = new MLineRecordReaderWrapper(data,  offset,  pathString);
+	    schema = loadSchemaFile();
+	  }
+
+  @Override
+  public void initialize(InputSplit split, TaskAttemptContext context) throws IOException, InterruptedException {
+    super.initialize(split,context);
+    reader.initialize(split, context);
+    schema = loadSchemaFile();
+    csvParser = new CSVParser(schema.getDelimiter().charAt(0));
+  }
+
+  @Override
+  public boolean nextKeyValue() throws IOException {
+    while (reader.nextKeyValue()) {
+      String line = reader.getCurrentValue().toString();
+      //logger.warn("######################## line : "+line + " schema:"+schema );
+      if (schema.isFilterOn() && schema.getFilter().getLineFilter() != null) {
+        String pattern = schema.getFilter().getLineFilter().getPattern();
+        if (regex == null) {
+          regex = Pattern.compile(pattern);
+        }
+        Matcher matcher = regex.matcher(line);
+        if (!matcher.find()) {
+          MLog.debug(sLogger, "Dropping record {} due to Line filters, Pattern Not Found {} ",
+              line, pattern);
+          this.statusReporter.incrCounter("Filters", "LineFilters", 1L);
+          continue;
+        }
+      }
+
+      if (line.startsWith(schema.getCommentInfo().getStartwith()))
+        continue;
+      String[] splits = null;
+      try {
+       // splits = csvParser.parseLine(line);
+    	  splits = line.split(",");
+      } catch (Exception e) {logger.error("##################### parseLine exception",e);
+        this.statusReporter.incrCounter("Record Reader", "Droping Records", 1);
+        continue;
+      }
+      
+      Map<String, String> resultValueStringMap = new HashMap<String, String>();
+      Map<String, Output> outputMap = schema.getOutputs().getOutputMap();
+
+      String offset = schema.getOutputs().getOffset();
+      if (offset != null) {
+        int offesetInt = Integer.parseInt(offset);
+        if (splits.length <= offesetInt)
+          continue;
+        Output header = outputMap.get("header");
+        if (header != null) {
+          if (header.getValue().equals(splits[offesetInt])) {
+            resultHeaderStringMap.clear();
+            if (!populateMap(splits, resultHeaderStringMap, header))
+              resultHeaderStringMap.clear();
+            else {
+              if (isValidationOn) {
+                RecordValidator recordValidator =
+                    RecordValidatorfactory.getInstance().getRecordValidator("default", "header");
+                if (!recordValidator.isValid(resultHeaderStringMap)) {
+                  resultHeaderStringMap.clear();
+                }
+              }
+              if (!resultHeaderStringMap.isEmpty() && outputMap.size() == 1) // If only header is to
+                                                                             // be determined.
+              {
+                resultMap = convertToMapWritable(resultHeaderStringMap);
+                return true;
+              }
+            }
+            continue;
+          } else if (resultHeaderStringMap.size() == 0) {
+            continue;
+          }
+        }
+
+        for (Output output : outputMap.values()) {
+          if (!output.getType().equals("header")) {
+            if (output.getValue().equals(splits[offesetInt])) {
+              if (populateMap(splits, resultValueStringMap, output))
+                resultValueStringMap.put("TYPE", output.getType());
+            }
+          }
+        }
+
+      } else {
+        for (Output output : outputMap.values()) {
+          if (populateMap(splits, resultValueStringMap, output))
+            resultValueStringMap.put("TYPE", output.getType());
+        }
+      }
+      if (!resultValueStringMap.containsKey("TYPE"))
+        continue;
+
+      Map<String, String> resultStringMap = new HashMap<String, String>();
+
+      if (schema.isFilterOn() && schema.getFilter().getColumnfilters() != null) {
+        if (!FilterValidator.executeFilters(schema.getFilter().getColumnfilters(),
+            resultValueStringMap)) {
+          // Counter support is handled inside filterValidators
+          continue;
+        }
+      }
+
+      if (isValidationOn) {
+        RecordValidator recordValidator =
+            RecordValidatorfactory.getInstance().getRecordValidator("default",
+                resultValueStringMap.get("TYPE"));
+        if (!recordValidator.isValid(resultValueStringMap))
+          continue;
+      }
+      resultStringMap = combineMap(resultHeaderStringMap, resultValueStringMap);
+      resultMap = convertToMapWritable(resultStringMap);
+     // logger.warn("################## resultMap:"+resultMap);
+      return true;
+    }
+    return false;
+  }
+
+  private boolean populateMap(String[] splits, Map<String, String> resultStringMap, Output output) {
+    try {
+      List<Token> tokenList = output.getTokens().getTokenList();
+      for (Iterator<Token> iterator = tokenList.iterator(); iterator.hasNext();) {
+        Token token = iterator.next();
+        String decodeInfo = token.getDecodeInfo();
+        String key = token.getKey();
+        int offset =
+            Integer.parseInt(decodeInfo.substring(decodeInfo.indexOf("[") + 1,
+                decodeInfo.indexOf("]")));
+        String transformations = token.getTransformations();
+        TransformerFactory.Transformers transformers = TransformerFactory.getTransformers(transformations);
+        String data = "";
+        try {
+          data = splits[offset];
+        } catch (ArrayIndexOutOfBoundsException e) {
+        }
+        for (Transformer transformer : transformers.getTransformerList()) {
+          data = transformer.transform(data);
+        }
+        resultStringMap.put(key, data);
+      }
+    } catch (ArrayIndexOutOfBoundsException e) {
+      return false;
+    }
+    return true;
+  }
+
+  @Override
+  public LongWritable getCurrentKey() throws IOException, InterruptedException {
+    return reader.getCurrentKey();
+  }
+
+  @Override
+  public MMapWritable getCurrentValue() throws IOException, InterruptedException {
+    return resultMap;
+  }
+
+  @Override
+  public float getProgress() throws IOException, InterruptedException {
+    return reader.getProgress();
+  }
+
+  @Override
+  public void close() throws IOException {
+    reader.close();
+  }
+}

@@ -1,0 +1,14 @@
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/schema/RowFieldsEnum.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/processor/JavaKinesisSparkProcessor.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/schema/RowFieldsVO.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/reader/IRecordReader.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/util/Constants.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/processor/DummyStreamingProcessor.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/processor/IStreamingProcessor.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/iterator/IRecordIterator.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/schema/FieldsEnum.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/properties/StreamingProperties.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/JavaKinesisWordCountASL.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/processor/JavaKinesisSparkProcessor2.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/JavaKinesisSparkProcessor2.java
+/Users/shivaa/Documents/workspace/sparkProcessor/src/main/java/com/hotstar/datamodel/streaming/spark/util/sparkObjects.java

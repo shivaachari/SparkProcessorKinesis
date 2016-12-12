@@ -1,0 +1,149 @@
+package com.hotstar.datamodel.streaming.spark.iterator;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Map;
+
+import com.hotstar.datamodel.streaming.spark.util.Constants;
+
+public class JSONRecordIterator implements IRecordIterator {
+
+	private static final ILogger logger;
+	static {
+		logger = LoggerService.getLogger(JSONRecordIterator.class.getName());
+	}
+
+	private JSONRecordReaderWrapper reader;
+	private String schemaFile;
+	private String masterSchemaFile;
+	private String dataSet;
+	private static int i;
+	
+	static int tempCounter = 0;
+
+	public JSONRecordIterator(Map<String, Object> config) {
+		//schemaFile = config.get(StreamingConstants.SCHEMA_CONFIG).toString();
+		//masterSchemaFile = config.get(StreamingConstants.ORDER_CONFIG)
+			//	.toString();
+		
+		schemaFile = "/user/oozie/conf/SS7Summary.xml";
+		masterSchemaFile = "/user/oozie/conf/SS7Summary.json";
+		dataSet = config.get(StreamingConstants.DATASET_CONFIG).toString();
+	}
+
+	@Override
+	public boolean hasNext() {
+		try {
+			return reader.nextKeyValue();
+		} catch (Exception e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	@Override
+	public Object[] next() {
+		Map<String, String> map = null;
+		Map<String, String> transformedMap = null;
+		try {
+			map = (MMapWritable) reader
+					.getCurrentValue();
+
+			//initializeDataSetProperties(map);
+
+			transformedMap = CommonUtils.populateMapForPig(map.get("TYPE"),
+					map, masterSchemaFile, map.get("VERSION"),
+					StreamingConstants.RECORD_TYPE_CSV);
+		
+			
+			if (! transformedMap.get(MapFieldsEnum.PROTOCOL.getName()).equals("3") ) {
+				if(i<10) {
+				logger.warn("################ Errror protocol value :"+ transformedMap.get(MapFieldsEnum.PROTOCOL.getName()));
+				i++;
+				}
+				
+				return new Object[0];
+			}
+			
+			
+			MapFieldsEnum[] vals = MapFieldsEnum.values();
+			Object[] result = new Object[vals.length];
+			
+			//StringBuilder sb = new StringBuilder();
+			
+			for (int i = 0; i < vals.length; i++) {
+				result[vals[i].index()] = ProcessingUtils.getColumnType(
+						vals[i].getDataType()).valueOf(
+						transformedMap.get(vals[i].getName()));
+				/*if (tempCounter < 10)
+				sb.append(vals[i].getName() + " : "+ transformedMap.get(vals[i].getName()) + " , ");*/
+			}
+			
+			/*if (tempCounter < 10) { 
+			logger.warn("############################# result: "+ result.length+" values: "+sb.toString());
+			tempCounter++;
+			}*/
+			
+			return result;
+		} catch (Exception e) {
+			logger.error("Exception in processing data"
+					+ Arrays.toString(map.values().toArray()),e);
+			throw new RuntimeException(e);
+		}
+	}
+
+	void initializeDataSetProperties(Map<String, String> map)
+			throws IOException {
+		
+		//logger.warn("##################### In initializeDataSetProperties");
+		DataSetConfigReader.DataSetConf.DataSet datasetconf = DataSetConfigReader
+				.getDataSetConf(dataSet);
+   map.put(Constants.DATASET_NAME,dataSet);
+		if (datasetconf != null) {
+			if (DataSetConf.getIsdcode() != null)
+				map.put(Constants.ISDCODE, DataSetConf.getIsdcode());
+			if (DataSetConf.getExitcodeList() != null)
+				map.put(Constants.EXITCODELIST, DataSetConf.getExitcodeList());
+			if (datasetconf.getTimezone() != null)
+				map.put(Constants.TIMEZONE, datasetconf.getTimezone(dataSet));
+			if (datasetconf.getDateformat() != null)
+				map.put(Constants.DATEFORMAT, datasetconf.getDateformat());
+			if (datasetconf.getMccMncPairs() != null)
+		        map.put(Constants.MCCMNC, datasetconf.getMccMncPairs());
+			
+			//logger.warn("##################### datasetconf is set:"+datasetconf);
+		}
+	}
+
+	@Override
+	public void remove() {
+		throw new IllegalAccessError("remove not supported");
+	}
+	
+	
+
+	@Override
+	public void init(byte[] data) {
+		try {
+			logger.warn("################# init(byte[] data)");
+			reader = new JSONRecordReaderWrapper(schemaFile);
+			logger.warn("################# Initialized reader:"+reader);
+		} catch (Exception e) {
+			logger.error("exception in getting record reader" + data, e);
+			e.printStackTrace();
+		}
+	}
+	@Override
+	public void init(byte[] data, int offset, String pathString) {
+		try {
+			//logger.warn("################# init(byte[] data, int offset, String pathString)");
+			//logger.warn("################# schemaFile:"+schemaFile +"\n############ pathString:"+pathString);
+			reader = new JSONRecordReaderWrapper(schemaFile, data, offset, pathString);
+			logger.warn("################# Initialized reader:"+reader );
+		} catch (Exception e) {
+			logger.error("exception in getting record reader" + data,e);
+			e.printStackTrace();
+		}
+	}
+
+}

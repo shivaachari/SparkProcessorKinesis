@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<datamodels>
+    <datamodel>
+        <name>location_tracking_model</name> <!-- model name -->
+        <processor>com.mobileum.streaming.processor.LocationProcessor</processor> <!-- Processor class which create
+                                                                                                 datamodel data from parsed messages -->
+        <receiver>
+            <num_threads>3</num_threads>  <!-- number of receiver threads -->
+            <sender>
+                <ipAddress>localhost</ipAddress>  <!-- ZeroMQ sender address -->
+                <configDataset>MSC</configDataset>   <!-- config that will be passed while creating the Iterator -->
+            </sender>
+        </receiver>
+    </datamodel>
+</datamodels>

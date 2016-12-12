@@ -1,0 +1,1 @@
+location_tracking_model=timestamp:long,subscriberimsi:long,subscribermsisdn:long,locationinformation:String
