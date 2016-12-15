@@ -1,11 +1,8 @@
 package com.hotstar.datamodel.streaming.spark.util;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
@@ -15,20 +12,22 @@ public class SparkObjects {
 	 static private transient JavaStreamingContext jssc  = null;
 	 static private transient SparkSession spark = null;
 	 static private transient SQLContext sqlContext = null;
-	 private static String appName;
+	 //private static String appName;
 	 
 	 private SparkObjects() {}
 	 
 	 static private boolean isInitialised = false;
 	 
 	 public static void initialize(String appName) throws Exception {
+		 isInitialised = true;
 			getSparkConf(appName, null);
-			 isInitialised = true;
+			 
 	 }
 	 
 	 public static void initialize(String appName, String master) throws Exception {
+		 isInitialised = true;
 				getSparkConf(appName, master);
-				isInitialised = true;
+				
 	 }
 	  
 	  static public SparkConf getSparkConf(String appName, String master) throws Exception {
@@ -92,11 +91,12 @@ public class SparkObjects {
 	    	return sqlContext;
 	    }
 	    
-	    static private transient SQLContext instance = null;
+	    /*static private transient SQLContext instance = null;
 		  static public SQLContext getSQLContext(SparkContext sparkContext) throws Exception  {
 			  if(!isInitialised)
 					throw new Exception("Spark Context not initialized, check if sparkObjects are initialized");
 		    if (instance == null) {
+		    	sparkContext.
 		      instance = new SQLContext(sparkContext);
 		    }
 		    return instance;
@@ -132,7 +132,7 @@ public class SparkObjects {
 				hiveContext.setConf("hive.exec.dynamic.partition.mode", "nonstrict");
 				
 				return hiveContext;
-		  }
+		  }*/
 	 
 	/*  static private transient HiveContext hiveContext = null;
 	  public static HiveContext getHiveContext(JavaRDD<Object[]> data) {

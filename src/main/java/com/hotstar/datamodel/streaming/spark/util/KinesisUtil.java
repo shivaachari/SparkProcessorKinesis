@@ -1,10 +1,8 @@
-package com.hotstar.datamodel.streaming.kinesis.util;
+package com.hotstar.datamodel.streaming.spark.util;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.spark.storage.StorageLevel;
-import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kinesis.KinesisUtils;
@@ -12,7 +10,7 @@ import org.apache.spark.streaming.kinesis.KinesisUtils;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.regions.RegionUtils;
 import com.amazonaws.services.kinesis.AmazonKinesisClient;
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
+import com.hotstar.datamodel.streaming.spark.config.Receiver;
 
 public class KinesisUtil {
 	
@@ -54,53 +52,63 @@ public class KinesisUtil {
 	 * the Kinesis Spark Streaming integration.
 	 * @param jssc 
 	 */
+	
+	
 
-	public static JavaDStream<byte[]> readDataFromKinesis(String kinesisAppName, String streamName, String endpointUrl, JavaStreamingContext jssc) {
+	public static JavaDStream<byte[]> readDataFromKinesis(JavaStreamingContext jssc, 
+			List<Receiver> receivers) throws Exception  {
 		 // Create a Kinesis client in order to determine the number of shards for the given stream
-	    AmazonKinesisClient kinesisClient =
-	        new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain());
-	    kinesisClient.setEndpoint(endpointUrl);
-	    int numShards =
-	        kinesisClient.describeStream(streamName).getStreamDescription().getShards().size();
-
-
-	    // In this example, we're going to create 1 Kinesis Receiver/input DStream for each shard.
-	    // This is not a necessity; if there are less receivers/DStreams than the number of shards,
-	    // then the shards will be automatically distributed among the receivers and each receiver
-	    // will receive data from multiple shards.
-	    int numStreams = numShards;
-
-	    // Spark Streaming batch interval
-	    Duration batchInterval = new Duration(5*1000);
-
-	    // Kinesis checkpoint interval.  Same as batchInterval for this example.
-	    Duration kinesisCheckpointInterval = batchInterval;
-
-	    // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
-	    // DynamoDB of the same region as the Kinesis stream
-	    String regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName();
-
-	  
-	    // Create the Kinesis DStreams
-	    List<JavaDStream<byte[]>> streamsList = new ArrayList<>(numStreams);
-	    for (int i = 0; i < numStreams; i++) {
-	      streamsList.add(
-	          KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,
-	              InitialPositionInStream.LATEST, kinesisCheckpointInterval,
-	              StorageLevel.MEMORY_AND_DISK_2())
-	      );
-	    }
 	    
-
-	    // Union all the streams if there is more than 1 stream
-	    JavaDStream<byte[]> unionStreams;
-	    if (streamsList.size() > 1) {
-	      unionStreams = jssc.union(streamsList.get(0), streamsList.subList(1, streamsList.size()));
-	    } else {
-	      // Otherwise, just use the 1 stream
-	      unionStreams = streamsList.get(0);
-	    }
-	    
+		// Union all the streams if there is more than 1 stream
+	    JavaDStream<byte[]> unionStreams = null;
+		try{
+		for (Receiver receiver : receivers) {
+		
+			AmazonKinesisClient kinesisClient =
+		        new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain());
+		    kinesisClient.setEndpoint(receiver.getEndpointUrl());
+		    int numShards =
+		        kinesisClient.describeStream(receiver.getStreamName())
+		        .getStreamDescription().getShards().size();
+	
+	
+		    // In this example, we're going to create 1 Kinesis Receiver/input DStream for each shard.
+		    // This is not a necessity; if there are less receivers/DStreams than the number of shards,
+		    // then the shards will be automatically distributed among the receivers and each receiver
+		    // will receive data from multiple shards.
+		    int numStreams = numShards;
+	
+		  
+		    // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
+		    // DynamoDB of the same region as the Kinesis stream
+		    String regionName = RegionUtils.getRegionByEndpoint(receiver.getEndpointUrl()).getName();
+	
+		  
+		    // Create the Kinesis DStreams
+		    List<JavaDStream<byte[]>> streamsList = new ArrayList<>(numStreams);
+		    for (int i = 0; i < numStreams; i++) {
+		      streamsList.add(
+		          KinesisUtils.createStream(jssc, receiver.getKinesisAppName(), receiver.getStreamName(), 
+		        		  receiver.getEndpointUrl(), regionName, receiver.getInitialPositionInStreamObject(), 
+		        		  receiver.getDurationObject(), receiver.getStorageLevelObject())
+		      );
+		    }
+		    
+	
+		    
+		    if (streamsList.size() > 1) {
+		      unionStreams = jssc.union(streamsList.get(0), streamsList.subList(1, streamsList.size()));
+		    } else {
+		      // Otherwise, just use the 1 stream
+		      unionStreams = streamsList.get(0);
+		    }
+		}
+		}catch (Exception ex) {
+			ex.printStackTrace();
+			
+		}
 	    return unionStreams;
 	}
+
+	
 }

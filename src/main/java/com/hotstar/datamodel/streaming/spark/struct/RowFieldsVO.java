@@ -1,8 +1,5 @@
 package com.hotstar.datamodel.streaming.spark.struct;
 
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.DataTypes;
-
 public class RowFieldsVO {
 	
 	String timestamp;
